@@ -1,0 +1,70 @@
+name: Build Termux arm64 CLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      tor_bundle_version:
+        description: "Tor expert bundle version (linux-aarch64)"
+        default: "16.0a4"
+      build_artihop:
+        description: "Build the ArtiHop engine (slow)"
+        type: boolean
+        default: false
+      release_tag:
+        description: "Release tag to upload the build to"
+        default: "termux-test"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+
+      - name: Fetch arm64 dependencies
+        env:
+          TOR_BUNDLE_VERSION: ${{ inputs.tor_bundle_version }}
+          BUILD_ARTIHOP: ${{ inputs.build_artihop }}
+        run: bash scripts/termux/download-deps-arm64.sh
+
+      - name: Publish CLI (linux-arm64, self-contained)
+        run: |
+          dotnet publish OnionHop/src/OnionHopV3.Cli/OnionHopV3.Cli.csproj \
+            -c Release -r linux-arm64 --self-contained true \
+            /p:PublishSingleFile=false /p:PublishReadyToRun=false \
+            -o publish-cli
+
+      - name: Strip Windows leftovers and package
+        run: |
+          find publish-cli -type f \( -name '*.exe' -o -name 'wintun.dll' \) -delete || true
+          chmod +x publish-cli/OnionHopV3.Cli
+          VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' OnionHop/src/OnionHopV3.Cli/OnionHopV3.Cli.csproj || echo 0.0.0)
+          NAME="OnionHopCLI-${VERSION}-termux-arm64.tar.gz"
+          tar -C publish-cli -czf "$NAME" .
+          sha256sum "$NAME" | tee "${NAME}.sha256.txt"
+          ls -lh "$NAME"
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --prerelease --title "$TAG" --notes "Automated Termux arm64 test build"
+          gh release upload "$TAG" OnionHopCLI-*-termux-arm64.tar.gz* --repo "$GITHUB_REPOSITORY" --clobber

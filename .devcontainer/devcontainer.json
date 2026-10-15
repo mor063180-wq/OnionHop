@@ -1,0 +1,10 @@
+{
+  "name": "OnionHop Termux port",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/dotnet:2": { "version": "9.0" },
+    "ghcr.io/devcontainers/features/go:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y qemu-user-static unzip jq"
+}
