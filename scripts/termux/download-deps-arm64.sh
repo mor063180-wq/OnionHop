@@ -50,7 +50,7 @@ WEBTUNNEL_SRC="$(find "$TEMP_DIR" -maxdepth 1 -type d -name 'webtunnel-*' | head
 (cd "$WEBTUNNEL_SRC" && CGO_ENABLED=0 go build -ldflags "-s -w" -o "$PT_DIR/webtunnel-client" ./main/client)
 
 echo "== dnstt-client"
-git clone --depth 1 https://www.bamsoftware.com/git/dnstt.git "$TEMP_DIR/dnstt"
+git clone https://www.bamsoftware.com/git/dnstt.git "$TEMP_DIR/dnstt"
 (cd "$TEMP_DIR/dnstt/dnstt-client" && CGO_ENABLED=0 go build -ldflags "-s -w" -o "$PT_DIR/dnstt-client" .)
 
 echo "== Snowflake volunteer proxy"
