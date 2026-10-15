@@ -1,0 +1,62 @@
+name: Termux arm64 smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag holding the arm64 tarball"
+        default: "termux-test"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout (for helper scripts)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ inputs.release_tag }}" --repo "$GITHUB_REPOSITORY" -p 'OnionHopCLI-*-termux-arm64.tar.gz' -D .
+          mkdir cli
+          tar -xzf OnionHopCLI-*-termux-arm64.tar.gz -C cli
+          du -sh cli
+          du -sh cli/* | sort -h | tail -12
+
+      - name: Check binary architecture
+        run: |
+          file cli/OnionHopV3.Cli cli/tor/tor cli/tor/pluggable_transports/* cli/snowflake/* 2>/dev/null | cut -c1-140
+
+      - name: Version and deps
+        run: |
+          bash scripts/termux/run-sim.sh cli version
+          bash scripts/termux/run-sim.sh cli deps || true
+
+      - name: Connect through Tor and fetch IP
+        run: |
+          bash scripts/termux/run-sim.sh cli connect --proxy-scope local --smart off --hold on > connect.log 2>&1 &
+          for i in $(seq 1 40); do
+            sleep 5
+            if curl -s -m 10 --socks5-hostname 127.0.0.1:9050 https://check.torproject.org/api/ip | tee ip.json | grep -q '"IsTor":true'; then
+              echo "Tor works:"; cat ip.json; exit 0
+            fi
+          done
+          echo "Tor did not come up in time"
+          tail -80 connect.log
+          exit 1
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs
+          path: |
+            connect.log
+            ip.json
+          if-no-files-found: ignore
